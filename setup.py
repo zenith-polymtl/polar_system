@@ -24,6 +24,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'polar = polar_system.position_system:main',
+            'fake_polar_target = polar_system.one_shot_fake_target:main',
+            'polar_teleop = polar_system.keyboard_teleop:main',
+            'polar_controller_interface = polar_system.controller_interface:main',
         ],
     },
 )
