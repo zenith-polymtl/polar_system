@@ -18,7 +18,7 @@ Publishing /goal_pose_polar at 20 Hz with relative=True
 class TargetPoseKeyboard(Node):
     def __init__(self):
         super().__init__('target_pose_keyboard')
-        self.pub = self.create_publisher(TargetPosePolar, '/goal_pose_polar', 10)
+        self.pub = self.create_publisher(TargetPosePolar, '/polar/goal_pose', 10)
         self.dt = 1.0/20.0
         self.timer = self.create_timer(self.dt, self.tick)
 

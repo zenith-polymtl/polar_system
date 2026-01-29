@@ -54,7 +54,7 @@ class RCChannelReader(Node):
 
         self.start_sub = self.create_subscription(  
             String,  
-            '/controller_activation',  
+            '/polar/controller_activation',  
             self.start_callback,  
             qos_profile  
         )
@@ -62,12 +62,12 @@ class RCChannelReader(Node):
 
         self.target_pub = self.create_publisher(  
             TargetPosePolar,  
-            '/goal_pose_polar',  
+            '/polar/goal_pose',  
             qos_profile_RE  
         )   
 
         self.activation_pub = self.create_publisher(
-            String, '/approach_activation', qos_profile_RE
+            String, '/polar/activation', qos_profile_RE
         ) 
           
         self.active = False
