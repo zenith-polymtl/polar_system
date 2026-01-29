@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped, PoseStamped
-from std_msgs.msg import String, Float64
+from std_msgs.msg import String, Float64, Bool
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 import numpy as np
 import time
@@ -171,6 +171,9 @@ class ApproachNode(Node):
         self.publisher_raw = self.create_publisher(
             PositionTarget, self.topic_raw_setpoint, qos_profile
         )
+        self.reached_pub = self.create_publisher(
+            Bool, '/polar/reached_target', qos_profile
+        )
 
         self.drone_position_sub = self.create_subscription(
             PoseStamped, self.topic_pose, self.drone_pose_callback, qos_profile_BE
@@ -194,7 +197,7 @@ class ApproachNode(Node):
             Float64, '/mavros/global_position/compass_hdg', self.yaw_callback, qos_profile_BE
         )
 
-        self.abort_state_pub = self.create_publisher(String, '/abort_brake', qos_profile)
+        self.abort_state_pub = self.create_publisher(String, '/polar/abort_brake', qos_profile)
 
 
         self._intialise_controllers()
@@ -226,6 +229,7 @@ class ApproachNode(Node):
         self.smooth_timer  = None
         self.info_timer    = None
         self.log_timer     = None
+        self.distance_error = None
         self.dt = 1/self.control_rate
         self.yaw_offset = 0.0
         self.vel_x, self.vel_y, self.vel_z = 0.0, 0.0, 0.0
@@ -396,10 +400,10 @@ class ApproachNode(Node):
         # Topics / frame
         self.declare_parameter("topic_pose", "/mavros/local_position/pose")
         self.declare_parameter("topic_vel", "/mavros/local_position/velocity_local")
-        self.declare_parameter("topic_goal_polar", "/goal_pose_polar")
-        self.declare_parameter("topic_estimated_center", "/estimated_center_location")
-        self.declare_parameter("topic_activation", "/approach_activation")
-        self.declare_parameter("topic_ctrl_activation", "/controller_activation")
+        self.declare_parameter("topic_goal_polar", "/polar/goal_pose")
+        self.declare_parameter("topic_estimated_center", "/polar/estimated_center")
+        self.declare_parameter("topic_activation", "/polar/activation")
+        self.declare_parameter("topic_ctrl_activation", "/polar/controller_activation")
         self.declare_parameter("topic_raw_setpoint", "/mavros/setpoint_raw/local")
         self.declare_parameter("frame_id", "map")
 
@@ -410,6 +414,7 @@ class ApproachNode(Node):
         self.declare_parameter("centripetal_limit", 1.5)
         self.declare_parameter("minimal_margin", 2.0)
         self.declare_parameter("soft_repulsion_initial_radius", 5.0)
+        self.declare_parameter("reach_threshold", 0.2)
 
         # CSV log
         self.declare_parameter("csv_path", "approach_log_polar.csv")
@@ -463,6 +468,7 @@ class ApproachNode(Node):
         self.centripetal_limit = float(gp("centripetal_limit").value)
         self.minimal_margin = float(gp("minimal_margin").value)
         self.soft_repulsion_initial_radius = float(gp("soft_repulsion_initial_radius").value)
+        self.reach_threshold = float(gp("reach_threshold").value)
 
         # CSV / comms
         self.csv_path         = gp("csv_path").value
@@ -653,6 +659,7 @@ class ApproachNode(Node):
             self.theta_error = wrap_pi(angle - theta_target)
             self.theta_distance_error = self.theta_error * self.distance_from_target
             self.z_error = delta_z + float(z_target)
+            self.distance_error = np.linalg.norm([self.r_error, self.z_error, self.theta_distance_error])
 
 
         # hdg_deg: 0 = North, +CW (aircraft heading)
@@ -988,6 +995,18 @@ class ApproachNode(Node):
                     self.get_logger().info("Altitude latch reset - new target provided")
                 self.z_latched = False
                 self.z_latched_value = None
+
+            self.check_reach_timer = self.create_timer(1.0, self.check_reach_callback)
+
+    def check_reach_callback(self):
+        if self.distance_error is None:
+            return
+
+        if self.distance_error < self.reach_threshold:
+            self.get_logger().info("Target reached within threshold.")
+            self.destroy_timer(self.check_reach_timer)
+            self.reached_pub.publish(Bool(data=True))
+            self.distance_error = None  # reset for next target
 
     def estimated_center_callback(self, msg):
         self.estimated_center = msg.pose.position
