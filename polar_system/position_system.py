@@ -245,14 +245,10 @@ class ApproachNode(Node):
         self.r_latched = False
         self.theta_latched = False
         self.z_latched = False
-        # Latched values (stored from previous target commands when NaN is received)
+        # Latched values (stored from current drone position when NaN is received)
         self.r_latched_value = None
         self.theta_latched_value = None
         self.z_latched_value = None
-        # Previous target values (used for latching)
-        self.prev_r_target = None
-        self.prev_theta_target = None
-        self.prev_z_target = None
 
         # --- Backends / Logging (from params) ---
         # Expanded CSV fields to capture setpoint vs command vs response (focus: relative mode)
@@ -568,9 +564,6 @@ class ApproachNode(Node):
             self.r_latched_value = None
             self.theta_latched_value = None
             self.z_latched_value = None
-            self.prev_r_target = None
-            self.prev_theta_target = None
-            self.prev_z_target = None
             
             self.destroy_timers()
             
@@ -657,7 +650,7 @@ class ApproachNode(Node):
             z_target = self.z_latched_value if self.z_latched and self.z_latched_value is not None else self.target_pose.z
             
             self.r_error = self.distance_from_target - r_target  # r+ is radial in
-            self.theta_error = wrap_pi(math.atan2(-delta_y, -delta_x) - theta_target)
+            self.theta_error = wrap_pi(angle - theta_target)
             self.theta_distance_error = self.theta_error * self.distance_from_target
             self.z_error = delta_z + float(z_target)
 
@@ -920,54 +913,81 @@ class ApproachNode(Node):
 
     def goal_pose_callback(self, msg):
         self.target_pose = msg
-        self.target_pose.theta = (-msg.theta+90)/180*np.pi
         
-        # --- Latch feature: detect NaN values and latch previous target values (absolute mode only) ---
+        # --- Latch feature: detect NaN values and latch CURRENT drone position (absolute mode only) ---
         if not self.target_pose.relative:
+            # Handle theta conversion and relative_theta
+            if not np.isnan(msg.theta):
+                if self.target_pose.relative_theta:
+                    # Relative theta: add offset to current angle
+                    if self.drone_pose is not None and self.estimated_center is not None:
+                        dx = self.estimated_center.x - self.drone_pose.x
+                        dy = self.estimated_center.y - self.drone_pose.y
+                        current_angle = math.atan2(dy, dx)
+                        theta_offset = msg.theta / 180.0 * np.pi  # convert degrees to radians
+                        self.target_pose.theta = wrap_pi(current_angle + theta_offset)
+                        self.get_logger().info(f"Relative theta: moving {msg.theta:.1f}° from current angle {np.degrees(current_angle):.1f}° to target {np.degrees(self.target_pose.theta):.1f}°")
+                    else:
+                        self.get_logger().warn("Cannot apply relative_theta - missing drone_pose or estimated_center")
+                        self.target_pose.theta = 0.0
+                else:
+                    # Absolute theta: convert compass heading to math angle
+                    self.target_pose.theta = (90 - msg.theta) / 180 * np.pi
+            else:
+                # theta is NaN, keep it as NaN for latching logic below
+                self.target_pose.theta = float('nan')
+            
             # Check if r is NaN and not already latched
             if np.isnan(self.target_pose.r) and not self.r_latched:
-                # Latch previous r target (holds last commanded value)
-                self.r_latched_value = self.prev_r_target if self.prev_r_target is not None else self.distance_from_target
-                self.r_latched = True
-                self.get_logger().info(f"Latched radius at {self.r_latched_value:.3f}m")
+                # Latch current distance from target
+                if self.drone_pose is not None and self.estimated_center is not None:
+                    dx = self.estimated_center.x - self.drone_pose.x
+                    dy = self.estimated_center.y - self.drone_pose.y
+                    self.r_latched_value = math.hypot(dx, dy)
+                    self.r_latched = True
+                    self.get_logger().info(f"Latched radius at current distance {self.r_latched_value:.3f}m")
+                else:
+                    self.get_logger().warn("Cannot latch radius - missing drone_pose or estimated_center")
             elif not np.isnan(self.target_pose.r):
                 # Reset latch flag when non-NaN value is provided
                 if self.r_latched:
                     self.get_logger().info("Radius latch reset - new target provided")
                 self.r_latched = False
                 self.r_latched_value = None
-                # Update previous target for next latch
-                self.prev_r_target = self.target_pose.r
             
             # Check if theta is NaN and not already latched
             if np.isnan(self.target_pose.theta) and not self.theta_latched:
-                # Latch previous theta target (holds last commanded heading)
-                self.theta_latched_value = self.prev_theta_target if self.prev_theta_target is not None else 0.0
-                self.theta_latched = True
-                self.get_logger().info(f"Latched theta at {np.degrees(self.theta_latched_value):.1f}°")
+                # Latch current angle to target
+                if self.drone_pose is not None and self.estimated_center is not None:
+                    dx = self.estimated_center.x - self.drone_pose.x
+                    dy = self.estimated_center.y - self.drone_pose.y
+                    self.theta_latched_value = math.atan2(dy, dx)
+                    self.theta_latched = True
+                    self.get_logger().info(f"Latched theta at current angle {np.degrees(self.theta_latched_value):.1f}°")
+                else:
+                    self.get_logger().warn("Cannot latch theta - missing drone_pose or estimated_center")
             elif not np.isnan(self.target_pose.theta):
                 # Reset latch flag when non-NaN value is provided
                 if self.theta_latched:
                     self.get_logger().info("Theta latch reset - new target provided")
                 self.theta_latched = False
                 self.theta_latched_value = None
-                # Update previous target for next latch
-                self.prev_theta_target = self.target_pose.theta
             
             # Check if z is NaN and not already latched
             if np.isnan(self.target_pose.z) and not self.z_latched:
-                # Latch previous z target (holds last commanded altitude)
-                self.z_latched_value = self.prev_z_target if self.prev_z_target is not None else self.drone_pose.z if self.drone_pose else 0.0
-                self.z_latched = True
-                self.get_logger().info(f"Latched altitude at {self.z_latched_value:.3f}m")
+                # Latch current altitude (negated to match coordinate system)
+                if self.drone_pose is not None:
+                    self.z_latched_value = self.drone_pose.z
+                    self.z_latched = True
+                    self.get_logger().info(f"Latched altitude at current position {self.z_latched_value:.3f}m")
+                else:
+                    self.get_logger().warn("Cannot latch altitude - missing drone_pose")
             elif not np.isnan(self.target_pose.z):
                 # Reset latch flag when non-NaN value is provided
                 if self.z_latched:
                     self.get_logger().info("Altitude latch reset - new target provided")
                 self.z_latched = False
                 self.z_latched_value = None
-                # Update previous target for next latch
-                self.prev_z_target = self.target_pose.z
 
     def estimated_center_callback(self, msg):
         self.estimated_center = msg.pose.position
