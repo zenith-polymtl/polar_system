@@ -172,7 +172,7 @@ class ApproachNode(Node):
             PositionTarget, self.topic_raw_setpoint, qos_profile
         )
         self.reached_pub = self.create_publisher(
-            Bool, '/polar/reached_target', qos_profile
+            Bool, self.topic_reached_target, qos_profile
         )
 
         self.drone_position_sub = self.create_subscription(
@@ -404,6 +404,7 @@ class ApproachNode(Node):
         self.declare_parameter("topic_estimated_center", "/polar/estimated_center")
         self.declare_parameter("topic_activation", "/polar/activation")
         self.declare_parameter("topic_ctrl_activation", "/polar/controller_activation")
+        self.declare_parameter("topic_reached_target", "/polar/reached_target")
         self.declare_parameter("topic_raw_setpoint", "/mavros/setpoint_raw/local")
         self.declare_parameter("frame_id", "map")
 
@@ -460,6 +461,8 @@ class ApproachNode(Node):
         self.topic_activation      = gp("topic_activation").value
         self.topic_ctrl_activation = gp("topic_ctrl_activation").value
         self.topic_raw_setpoint    = gp("topic_raw_setpoint").value
+        self.topic_raw_setpoint    = gp("topic_raw_setpoint").value
+        self.topic_reached_target  = gp("topic_reached_target").value
         self.frame_id              = gp("frame_id").value
 
         # Rates / filters / limits
