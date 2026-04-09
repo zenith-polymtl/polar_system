@@ -292,6 +292,9 @@ class ApproachNode(Node):
         start_timers_freq = 2.0  # Hz
         self.start_timers_timer = self.create_timer(1.0 / start_timers_freq, self.launch_timers)
 
+        self.get_logger().info("Polar positioning node started")
+
+
     def launch_timers(self):
         # Start only when we WANT to run and have the MINIMUM inputs
         if not self.approach_active:
@@ -318,8 +321,6 @@ class ApproachNode(Node):
 
         if self.log and self.log_timer is None:
             self.log_timer = self.create_timer(1/10.0, self.log_callback)
-            self.get_logger().info("Polar positioning node started")
-
 
     def destroy_timers(self):
         try:
@@ -415,7 +416,7 @@ class ApproachNode(Node):
         self.declare_parameter("centripetal_limit", 1.5)
         self.declare_parameter("minimal_margin", 2.0)
         self.declare_parameter("soft_repulsion_initial_radius", 5.0)
-        self.declare_parameter("reach_threshold", 0.2)
+        self.declare_parameter("reach_threshold", 0.3)
 
         # CSV log
         self.declare_parameter("csv_path", "approach_log_polar.csv")
@@ -923,6 +924,9 @@ class ApproachNode(Node):
 
     def goal_pose_callback(self, msg):
         self.target_pose = msg
+        if self.talk:
+            self.get_logger().info("Received target")
+
         
         # --- Latch feature: detect NaN values and latch CURRENT drone position (absolute mode only) ---
         if not self.target_pose.relative:
@@ -1013,6 +1017,8 @@ class ApproachNode(Node):
 
     def estimated_center_callback(self, msg):
         self.estimated_center = msg.pose.position
+        if self.talk:
+            self.get_logger().info(f"Got center position : {self.estimated_center}")
 
     def publish_zero(self):
         # One last zero-velocity setpoint

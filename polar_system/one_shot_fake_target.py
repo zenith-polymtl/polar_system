@@ -8,7 +8,7 @@ from builtin_interfaces.msg import Time
 class OneShotFakeTarget(Node):
     def __init__(self, delay_sec: float = 5.0):
         super().__init__('one_shot_fake_target')
-        self.pub = self.create_publisher(PoseStamped, '/polar/estimated_center', 10)
+        self.pub = self.create_publisher(PoseStamped, '/polar/estimated_center_location', 10)
         # fire once after delay_sec
         self.create_timer(delay_sec, self._fire_once)
 
