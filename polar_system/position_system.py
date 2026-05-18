@@ -219,7 +219,7 @@ class ApproachNode(Node):
         self.theta_error = None
         self.r_ref = None
         self.yaw = None
-        self.filtered_v_r = None
+        self.filtered_v_r = 0.0
         self.approach_active = False
         self.last_delta_t = None
         self.total_yaw_err = None
@@ -431,16 +431,16 @@ class ApproachNode(Node):
 
         # --- Unified PID params for all controllers (kp, ki, kd, max_i, max_out, deriv_tau, d_clip) ---
         for pname, defaults in [
-            ("pid_r",       (3.75, 1.0, 0.0, 1.0, 7.0, 0.0, 0.0)),
+            ("pid_r",       (2.2, 1.0, 0.2, 0.2, 7.0, 0.0, 1.0)),
             ("pid_r_abs",   (0.2,  0.1, 0.1, 0.3, 2.0, 0.1, 0.0)),
-            ("pid_r_hold",  (0.3,  0.1, 0.15,0.5, 3.0, 0.1, 0.0)),
+            ("pid_r_hold",  (0.2,  0.1, 0.12,0.5, 3.0, 0.1, 0.0)),
             ("pid_theta_abs",(0.3, 0.1, 0.15,0.5, 3.0, 0.1, 0.0)),
             ("pid_theta_hold",(0.6,0.2, 0.3, 0.5, 3.0, 0.1, 0.0)),
-            ("pid_v_theta", (2.5,  1.0, 0.0, 0.2, 2.25, 0.0, 0.3)),
+            ("pid_v_theta", (2.2,  1.0, 0.0, 0.2, 2.25, 0.0, 0.3)),
             ("pid_z",       (0.6,  0.0, 0.3, 1.0, 3.0, 0.075, 0.0)),
             ("pid_z_abs",   (0.3,  0.0, 0.25,0.5, 3.0, 0.1, 0.8)),
             ("pid_z_hold",  (0.3,  0.1, 0.15,0.5, 3.0, 0.1, 0.0)),
-            ("pid_yaw",     (2.0,  1.0, 0.3, 0.5, 6.0, 0.0, 0.0)),
+            ("pid_yaw",     (1.5,  1.0, 0.24, 0.4, 6.0, 0.0, 0.05)),
         ]:
             kp, ki, kd, max_i, max_out, deriv_tau, d_clip = defaults
             self.declare_parameter(f"{pname}_kp", kp)
@@ -564,7 +564,7 @@ class ApproachNode(Node):
             self.current_time = None
             self.last_time = None
             self.drone_speed = None
-            self.filtered_v_r = None
+            self.filtered_v_r = 0.0
             self.yaw_offset = 0.0
             
             # --- Reset latch feature ---
@@ -989,13 +989,14 @@ class ApproachNode(Node):
             
             # Check if z is NaN and not already latched
             if np.isnan(self.target_pose.z) and not self.z_latched:
-                # Latch current altitude (negated to match coordinate system)
-                if self.drone_pose is not None:
-                    self.z_latched_value = self.drone_pose.z
+                if self.drone_pose is not None and self.estimated_center is not None:
+                    self.z_latched_value = self.drone_pose.z - self.estimated_center.z
                     self.z_latched = True
-                    self.get_logger().info(f"Latched altitude at current position {self.z_latched_value:.3f}m")
+                    self.get_logger().info(
+                        f"Latched altitude offset at {self.z_latched_value:.3f}m"
+                    )
                 else:
-                    self.get_logger().warn("Cannot latch altitude - missing drone_pose")
+                    self.get_logger().warn("Cannot latch altitude - missing drone_pose or estimated_center")
             elif not np.isnan(self.target_pose.z):
                 # Reset latch flag when non-NaN value is provided
                 if self.z_latched:
