@@ -416,7 +416,7 @@ class ApproachNode(Node):
         self.declare_parameter("centripetal_limit", 1.5)
         self.declare_parameter("minimal_margin", 2.0)
         self.declare_parameter("soft_repulsion_initial_radius", 5.0)
-        self.declare_parameter("reach_threshold", 0.3)
+        self.declare_parameter("reach_threshold", 0.4)
 
         # CSV log
         self.declare_parameter("csv_path", "approach_log_polar.csv")
@@ -1004,7 +1004,7 @@ class ApproachNode(Node):
                 self.z_latched = False
                 self.z_latched_value = None
 
-            self.check_reach_timer = self.create_timer(1.0, self.check_reach_callback)
+            self.check_reach_timer = self.create_timer(0.2, self.check_reach_callback)
 
     def check_reach_callback(self):
         if self.distance_error is None:
