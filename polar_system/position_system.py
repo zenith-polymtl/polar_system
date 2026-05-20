@@ -416,7 +416,7 @@ class ApproachNode(Node):
         self.declare_parameter("centripetal_limit", 1.5)
         self.declare_parameter("minimal_margin", 2.0)
         self.declare_parameter("soft_repulsion_initial_radius", 5.0)
-        self.declare_parameter("reach_threshold", 0.4)
+        self.declare_parameter("reach_threshold", 0.3)
 
         # CSV log
         self.declare_parameter("csv_path", "approach_log_polar.csv")
